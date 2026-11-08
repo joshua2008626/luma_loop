@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>LUMA LOOP</title>
+<style>
+:root{color-scheme:dark;--bg:#050818}
+@media (prefers-color-scheme: dark){:root{--bg:#050818}}
+:root:not([data-theme="light"]){--bg:#050818}
+:root[data-theme="dark"]{--bg:#050818}
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none}
+body{display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif}
+canvas{display:block;touch-action:none}
+#pad{position:fixed;left:0;right:0;bottom:0;display:none;justify-content:space-between;align-items:flex-end;padding:12px calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));pointer-events:none}
+.g{display:flex;gap:12px;pointer-events:auto}
+.b{width:68px;height:68px;border-radius:50%;border:2px solid #6ff;background:rgba(40,120,180,.35);color:#dff;font-size:26px;display:flex;align-items:center;justify-content:center}
+.b.on{background:rgba(100,255,255,.55)}
+#sw{border-color:#d6f;background:rgba(150,60,200,.35)}
+@media (pointer:coarse){#pad{display:flex}}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="pad"><div class="g"><div class="b" id="bl">◀</div><div class="b" id="br">▶</div></div>
+<div class="g"><div class="b" id="sw">⇄</div><div class="b" id="bj">▲</div></div></div>
+<script>
+"use strict";
+const C=document.getElementById('c'),X=C.getContext('2d'),W=960,H=540,S=22;
+C.width=W;C.height=H;
+function fit(){const s=Math.min(innerWidth/W,innerHeight/H);C.style.width=W*s+'px';C.style.height=H*s+'px'}
+addEventListener('resize',fit);addEventListener('orientationchange',fit);fit();
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---- save (safe if storage unavailable) ----
+let snd=true,best=0;
+try{snd=localStorage.getItem('ll_snd')!=='0';best=+localStorage.getItem('ll_best')||0}catch(e){}
+function save(){try{localStorage.setItem('ll_snd',snd?'1':'0');localStorage.setItem('ll_best',best)}catch(e){}}
+
+// ---- audio (WebAudio, optional) ----
+let AC=null;
+function tone(f,d,t,v,f2,delay){if(!snd)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const n=AC.currentTime+(delay||0),o=AC.createOscillator(),g=AC.createGain();o.type=t||'sine';o.frequency.setValueAtTime(f,n);if(f2)o.frequency.exponentialRampToValueAtTime(f2,n+d);g.gain.setValueAtTime(v||.06,n);g.gain.exponentialRampToValueAtTime(.001,n+d);o.connect(g);g.connect(AC.destination);o.start(n);o.stop(n+d)}catch(e){}}
+
+// ---- level 1: First Light ----
+// platform: [x,y,w,h,d]  d: 0 both worlds, 1 Light only, 2 Shadow only
+const LV={name:'First Light',need:6,portal:[880,458],
+P:[[0,500,220,40,0],[740,500,220,40,0],[250,430,110,16,1],[410,370,110,16,2],[570,310,110,16,1]],
+F:[[305,395],[465,335],[625,275],[385,340],[545,285],[720,330],[790,470],[850,470]],
+laser:{x:800,y:220,h:280}}; // deadly in Light world only
+
+// ---- state ----
+let ST='menu',dim=0,bgT=0,trT=1,energy=100,shownE=100,score=0,time=0,deaths=0,msg='',msgT=0,shake=0,coyote=0,jbuf=0;
+let p,got,parts=[];
+const keys={};
+const stars=Array.from({length:90},()=>({x:Math.random()*W,y:Math.random()*H,z:.2+Math.random()*.8}));
+function reset(){p={x:60,y:470,vx:0,vy:0,g:false};dim=0;bgT=0;energy=100;shownE=100;got=new Set();score=0;time=0;parts=[];msg='';}
+reset();
+const act=()=>LV.P.filter(q=>q.length&&(q[4]===0||q[4]===dim+1));
+const hit=(a,q)=>a.x<q[0]+q[2]&&a.x+S>q[0]&&a.y<q[1]+q[3]&&a.y+S>q[1];
+function say(t){msg=t;msgT=1.6}
+function burst(x,y,n,c){for(let i=0;i<n;i++){const a=Math.random()*6.28,s=40+Math.random()*160;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:.7,c})}}
+function die(){deaths++;tone(220,.5,'sawtooth',.06,50);burst(p.x+11,p.y+11,30,'#f66');if(!reduced)shake=.35;const d=deaths;reset();deaths=d;say('Try again')}
+
+// ---- dimension switching (never causes unfair falls) ----
+const COST=20;
+function trySwitch(){
+  if(ST!=='play')return;
+  if(energy<COST){say('Not enough energy');tone(120,.15,'square',.05);return}
+  const nd=1-dim,cur=act(),next=LV.P.filter(q=>q[4]===0||q[4]===nd+1);
+  const feet={x:p.x,y:p.y+3,w:0};
+  const standingOnVanishing=cur.some(q=>q[4]!==0&&q[4]!==nd+1&&p.g&&p.x<q[0]+q[2]&&p.x+S>q[0]&&Math.abs(p.y+S-q[1])<3);
+  if(standingOnVanishing){say('Cannot switch: platform would vanish');tone(120,.15,'square',.05);return}
+  if(next.some(q=>hit(p,q))){say('Cannot switch: blocked');tone(120,.15,'square',.05);return}
+  dim=nd;energy-=COST;trT=0;burst(p.x+11,p.y+11,24,dim?'#e5f':'#6ff');
+  tone(dim?700:400,.3,'sawtooth',.05,dim?150:900);
+}
+
+// ---- input ----
+function jump(){jbuf=.12}
+addEventListener('keydown',e=>{
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight'].includes(e.code))e.preventDefault();
+  if(e.repeat)return;keys[e.code]=true;
+  if(ST==='menu'&&(e.code==='Enter'||e.code==='Space')){start();return}
+  if(ST==='win'&&(e.code==='Enter'||e.code==='Space')){start();return}
+  if(e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW')jump();
+  if(e.code==='ShiftLeft'||e.code==='ShiftRight')trySwitch();
+  if(e.code==='Escape'||e.code==='KeyP')togglePause();
+});
+addEventListener('keyup',e=>{keys[e.code]=false});
+addEventListener('blur',()=>{if(ST==='play')ST='pause'});
+function bind(id,down,up){const el=document.getElementById(id);el.addEventListener('pointerdown',e=>{e.preventDefault();el.classList.add('on');down()});['pointerup','pointercancel','pointerleave'].forEach(t=>el.addEventListener(t,()=>{el.classList.remove('on');up&&up()}))}
+bind('bl',()=>keys.L=true,()=>keys.L=false);bind('br',()=>keys.R=true,()=>keys.R=false);
+bind('bj',jump);bind('sw',trySwitch);
+function togglePause(){if(ST==='play')ST='pause';else if(ST==='pause')ST='play'}
+function start(){reset();deaths=0;ST='play';tone(520,.2,'sine',.06,780)}
+C.addEventListener('pointerdown',e=>{
+  const r=C.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;
+  const in_=(a,b,w,h)=>x>=a&&x<=a+w&&y>=b&&y<=b+h;
+  if(ST==='menu'){if(in_(380,370,200,44)){snd=!snd;save();tone(600,.1)}else start()}
+  else if(ST==='win'){start()}
+  else if(ST==='pause'){ST='play'}
+  else if(ST==='play'&&in_(896,10,50,40))ST='pause';
+});
+
+// ---- update ----
+function upd(dt){
+  time+=dt;trT=Math.min(1,trT+dt*3);bgT+=((dim)-bgT)*Math.min(1,dt*5);
+  shownE+=(energy-shownE)*Math.min(1,dt*8);
+  if(msgT>0)msgT-=dt;if(shake>0)shake-=dt;
+  const dir=((keys.ArrowLeft||keys.KeyA||keys.L)?-1:0)+((keys.ArrowRight||keys.KeyD||keys.R)?1:0);
+  p.vx+=(dir*230-p.vx)*Math.min(1,dt*12);
+  coyote=p.g?.1:coyote-dt;jbuf-=dt;
+  if(jbuf>0&&coyote>0){p.vy=-540;p.g=false;coyote=0;jbuf=0;tone(320,.15,'square',.05,640)}
+  p.vy=Math.min(p.vy+1500*dt,900);
+  p.x+=p.vx*dt;p.x=Math.max(0,Math.min(W-S,p.x));
+  for(const q of act())if(hit(p,q)){if(p.vx>0)p.x=q[0]-S;else if(p.vx<0)p.x=q[0]+q[2];p.vx=0}
+  p.y+=p.vy*dt;p.g=false;
+  for(const q of act())if(hit(p,q)){if(p.vy>0){p.y=q[1]-S;p.g=true}else if(p.vy<0)p.y=q[1]+q[3];p.vy=0}
+  if(!reduced&&Math.random()<.6)parts.push({x:p.x+11,y:p.y+11,vx:(Math.random()-.5)*20,vy:(Math.random()-.5)*20,l:.4,c:dim?'#c4f':'#7ff'});
+  LV.F.forEach((f,i)=>{if(!got.has(i)&&Math.hypot(p.x+11-f[0],p.y+11-f[1])<22){got.add(i);score+=100;energy=Math.min(100,energy+15);burst(f[0],f[1],14,'#fff');tone(880,.14,'sine',.07,1320)}});
+  const L=LV.laser;
+  if(dim===0&&p.x+S>L.x-3&&p.x<L.x+3&&p.y+S>L.y)return die();
+  if(p.y>H+40)return die();
+  const d=Math.hypot(p.x+11-LV.portal[0],p.y+11-LV.portal[1]);
+  if(d<32){
+    if(got.size>=LV.need){score+=Math.max(0,Math.round(1000-time*10));if(score>best){best=score;save()}ST='win';burst(LV.portal[0],LV.portal[1],60,'#fff');[523,659,784,1047].forEach((f,i)=>tone(f,.3,'sine',.07,0,i*.12))}
+    else if(msgT<=0)say('Collect at least '+LV.need+' fragments');
+  }
+  for(const q of parts){q.x+=q.vx*dt;q.y+=q.vy*dt;q.l-=dt}
+  parts=parts.filter(q=>q.l>0);
+}
+
+// ---- drawing ----
+const mix=(a,b,t)=>a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+function bg(){
+  const t=bgT,top=mix([10,50,110],[48,10,84],t),bot=mix([2,14,44],[10,4,28],t);
+  const g=X.createLinearGradient(0,0,0,H);g.addColorStop(0,`rgb(${top})`);g.addColorStop(1,`rgb(${bot})`);X.fillStyle=g;X.fillRect(0,0,W,H);
+  const off=ST==='play'||ST==='pause'?p.x*.05:0;
+  for(const s of stars){X.globalAlpha=.25+.5*s.z;X.fillStyle=t>.5?'#d9a8ff':'#bff';const x=((s.x-off*s.z*10)%W+W)%W;X.fillRect(x,s.y,1+s.z*1.5,1+s.z*1.5)}
+  X.globalAlpha=1;
+}
+function glowRect(x,y,w,h,c,b){X.shadowColor=c;X.shadowBlur=b;X.fillStyle=c;X.fillRect(x,y,w,h);X.shadowBlur=0}
+function world(){
+  for(const q of LV.P){
+    const on=q[4]===0||q[4]===dim+1,c=q[4]===0?'#d8f6ff':q[4]===1?'#38e8ff':'#e64cff';
+    if(on){glowRect(q[0],q[1],q[2],q[3],c,14)}
+    else{X.strokeStyle=c;X.globalAlpha=.25;X.setLineDash([6,6]);X.strokeRect(q[0]+.5,q[1]+.5,q[2],q[3]);X.setLineDash([]);X.globalAlpha=1}
+  }
+  const L=LV.laser,lit=dim===0;
+  X.globalAlpha=lit?1:.18;glowRect(L.x-3,L.y,6,L.h,'#ff4a6a',lit?18:0);glowRect(L.x-10,L.y-10,20,10,'#aaa',0);X.globalAlpha=1;
+  LV.F.forEach((f,i)=>{if(got.has(i))return;const y=f[1]+Math.sin(time*3+i)*4;X.save();X.translate(f[0],y);X.rotate(Math.PI/4);X.shadowColor='#fff';X.shadowBlur=14;X.fillStyle=dim?'#ffd0ff':'#d0ffff';X.fillRect(-6,-6,12,12);X.restore();X.shadowBlur=0});
+  const [px,py]=LV.portal,ok=got.size>=LV.need;
+  for(let i=0;i<3;i++){X.strokeStyle=ok?'#fff':'#678';X.shadowColor=ok?'#fff':'#678';X.shadowBlur=ok?16:4;X.lineWidth=2;X.beginPath();X.ellipse(px,py,14+i*6,26+i*3,time*(i%2?1:-1)*(reduced?0:1),0,6.28);X.stroke()}
+  X.shadowBlur=0;X.lineWidth=1;
+  for(const q of parts){X.globalAlpha=Math.max(0,q.l*1.5);X.fillStyle=q.c;X.fillRect(q.x,q.y,3,3)}X.globalAlpha=1;
+  const c=dim?'#f4a8ff':'#aef',bob=reduced?0:Math.sin(time*4)*1.5;
+  X.shadowColor=dim?'#d4f':'#4ff';X.shadowBlur=22;X.fillStyle=c;X.beginPath();X.arc(p.x+11,p.y+11+bob,10+(1-trT)*6,0,6.28);X.fill();X.shadowBlur=0;
+  X.fillStyle='#fff';X.beginPath();X.arc(p.x+11+(p.vx>5?2:p.vx<-5?-2:0),p.y+9+bob,3,0,6.28);X.fill();
+}
+function txt(s,x,y,sz,c,al){X.font=`bold ${sz}px system-ui,sans-serif`;X.textAlign=al||'center';X.fillStyle=c||'#fff';X.fillText(s,x,y)}
+function btn(x,y,w,h,s){X.fillStyle='rgba(60,140,200,.3)';X.strokeStyle='#6ff';X.lineWidth=2;X.beginPath();X.roundRect(x,y,w,h,12);X.fill();X.stroke();txt(s,x+w/2,y+h/2+7,20)}
+function hud(){
+  txt('Level 1/30 · '+LV.name,16,28,16,'#cff','left');
+  X.fillStyle='rgba(255,255,255,.12)';X.fillRect(16,40,200,12);
+  X.shadowColor=dim?'#d4f':'#4ff';X.shadowBlur=8;X.fillStyle=dim?'#d64cff':'#38e8ff';X.fillRect(16,40,2*Math.max(0,shownE),12);X.shadowBlur=0;
+  txt('Energy '+Math.round(energy),224,51,12,'#cff','left');
+  txt('Score '+score,16,76,14,'#fff','left');
+  txt('Fragments '+got.size+'/'+LV.F.length+' (need '+LV.need+')',16,96,14,'#fff','left');
+  txt(dim?'SHADOW WORLD':'LIGHT WORLD',W/2,28,16,dim?'#f4a8ff':'#aef');
+  X.fillStyle='rgba(60,140,200,.3)';X.fillRect(896,10,50,40);txt('II',921,38,18);
+  if(msgT>0)txt(msg,W/2,70,16,'#ffd','center');
+}
+function frame(now){
+  const dt=Math.min(.033,(now-(frame.t||now))/1000);frame.t=now;
+  if(ST==='play')upd(dt);else if(ST==='menu')time+=dt;
+  X.save();if(shake>0){X.translate((Math.random()-.5)*8,(Math.random()-.5)*8)}
+  bg();
+  if(ST==='menu'){
+    txt('LUMA LOOP',W/2,180,84,'#dff');X.shadowColor='#4ff';X.shadowBlur=30;txt('LUMA LOOP',W/2,180,84,'#aef');X.shadowBlur=0;
+    txt('Every shadow hides a different path. Every light reveals a new possibility.',W/2,225,16,'#bdf');
+    const bob=Math.sin(time*2)*8;X.shadowColor='#4ff';X.shadowBlur=24;X.fillStyle='#aef';X.beginPath();X.arc(W/2,270+bob,10,0,6.28);X.fill();X.shadowBlur=0;
+    btn(380,300,200,56,'Play');btn(380,370,200,44,'Sound: '+(snd?'On':'Off'));
+    txt('A / D or arrows move · Space jump · Shift switch dimension · Esc pause',W/2,455,14,'#9bd');
+    txt('Best score '+best,W/2,480,14,'#9bd');
+    txt('A game by Joshua Samuel · Just An Hour With Josh',W/2,520,13,'#79c');
+  }else{
+    world();hud();
+    if(ST==='pause'){X.fillStyle='rgba(0,0,10,.6)';X.fillRect(0,0,W,H);txt('Paused',W/2,250,48);txt('Tap or press Esc to resume',W/2,290,18,'#cff')}
+    if(ST==='win'){X.fillStyle='rgba(0,0,10,.65)';X.fillRect(0,0,W,H);txt('Level Complete',W/2,220,52,'#aef');txt('Score '+score+'  ·  Time '+time.toFixed(1)+'s  ·  Best '+best,W/2,265,20);txt('Tap or press Enter to play again',W/2,310,18,'#cff');txt('Levels 2-30 are coming in the full Phaser build',W/2,350,14,'#9bd')}
+  }
+  X.restore();requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>
