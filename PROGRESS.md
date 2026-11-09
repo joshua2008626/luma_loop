@@ -34,3 +34,6 @@
 - LICENSE: MIT (default chosen on author's go-ahead; author may change it)
 - Author reported the local run as OK ("All okay"); the authoring sandbox itself still never ran Phaser or Vite.
 - LUMA-LOOP-FINAL.zip built from the tested source; no pre-built dist/ folder because Vite could not be run in the sandbox.
+
+## Playables audit (2026-11-09)
+- Audited against the current official requirements; fixed cloud-only saving, load-before-save ordering, real pause for audio, firstFrameReady placement, mouse support for gameplay, end-of-game message, settings-panel Esc bug. 25 tests pass. See PLAYABLES_AUDIT.md. Production and Playables builds were NOT run in the sandbox (no network); a CI job (playables-check) now does it.

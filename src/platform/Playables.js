@@ -18,14 +18,21 @@ export const Playables = {
   async sendScore(n) { try { const g = live(); if (!g) return false; await g.engagement.sendScore({ value: Math.max(0, Math.round(n)) }); return true; } catch { return false; } },
   logError() { guard(() => live() && live().health.logError()); }
 };
-// Storage adapter for SaveSystem: localStorage when available, plus debounced cloud save inside Playables.
+// Storage adapter for SaveSystem.
+// Standalone: localStorage. Inside Playables: cloud save ONLY (the certification forbids any other progress mechanism),
+// debounced, and never sent before loadData() has completed (otherwise the SDK rejects it).
 export class CloudStorage {
-  constructor(local, delay = 500) { this.local = local; this.delay = delay; this.timer = null; this.pending = null; }
-  getItem(k) { return this.local ? this.local.getItem(k) : null; }
+  constructor(local, delay = 500) { this.local = local; this.delay = delay; this.timer = null; this.pending = null; this.gate = Promise.resolve(); }
+  setGate(promise) { this.gate = Promise.resolve(promise).catch(() => {}); }
+  getItem(k) { return !Playables.active && this.local ? this.local.getItem(k) : null; }
   setItem(k, v) {
-    if (this.local) { try { this.local.setItem(k, v); } catch (e) { if (!Playables.active) throw e; } }
-    else if (!Playables.active) throw new Error('no storage');
-    if (Playables.active) { this.pending = v; clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), this.delay); }
+    if (Playables.active) { this.pending = v; clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), this.delay); return; }
+    if (!this.local) throw new Error('no storage');
+    this.local.setItem(k, v);
   }
-  flush() { clearTimeout(this.timer); if (this.pending !== null) { const v = this.pending; this.pending = null; return Playables.saveData(v); } return Promise.resolve(false); }
+  async flush() {
+    clearTimeout(this.timer); await this.gate;
+    if (this.pending === null) return false;
+    const v = this.pending; this.pending = null; return Playables.saveData(v);
+  }
 }

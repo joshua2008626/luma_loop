@@ -21,7 +21,7 @@ test('Playables wrapper calls only documented SDK methods when present', async (
   assert.deepEqual(calls, ['ffr', 'ready', 'onPause', 'onResume', 'onAudio', 'err', 'save:S', 'score:13']);
   const mem = { d: {}, getItem(k) { return this.d[k] ?? null; }, setItem(k, v) { this.d[k] = v; } };
   const cs = new CloudStorage(mem, 10); cs.setItem('k', 'v1'); cs.setItem('k', 'v2'); await cs.flush();
-  assert.equal(mem.d.k, 'v2'); assert.deepEqual(calls.slice(-1), ['save:v2']);
+  assert.deepEqual(mem.d, {}, 'localStorage untouched inside Playables'); assert.deepEqual(calls.slice(-1), ['save:v2']);
   globalThis.ytgame = { IN_PLAYABLES_ENV: true, game: { saveData: async () => { throw new Error('x'); }, loadData: async () => { throw new Error('x'); } } };
   assert.equal(await Playables.saveData('x'), false); assert.equal(await Playables.loadData(), null);
   delete globalThis.ytgame;
@@ -33,4 +33,16 @@ test('cloud merge keeps the best of both saves and never loses progress', () => 
   assert.deepEqual(a.data.completed[1], { score: 500, time: 20 }); assert.ok(a.isUnlocked(3));
   assert.equal(a.data.stats.switches, 50); assert.deepEqual(a.data.achievements.sort(), ['collector', 'first_light']); assert.equal(a.totalScore(), 900);
   assert.equal(a.mergeFrom('{garbage'), false); assert.equal(a.totalScore(), 900);
+});
+
+test('standalone CloudStorage uses localStorage and never calls the SDK', () => {
+  delete globalThis.ytgame; const mem = { d: {}, getItem(k) { return this.d[k] ?? null; }, setItem(k, v) { this.d[k] = v; } };
+  const cs = new CloudStorage(mem); cs.setItem('k', 'v'); assert.equal(cs.getItem('k'), 'v');
+  assert.throws(() => new CloudStorage(null).setItem('k', 'v'), 'no storage and no SDK must surface as a failed save');
+});
+test('older save versions are read, unknown newer ones are ignored', () => {
+  const s = new SaveSystem(null);
+  assert.equal(s.validate({ version: 1, unlocked: 4 }).unlocked, 4);
+  assert.equal(s.validate({ version: 2, unlocked: 4 }).unlocked, 1);
+  assert.equal(s.validate({ version: 'x', unlocked: 4 }).unlocked, 1);
 });

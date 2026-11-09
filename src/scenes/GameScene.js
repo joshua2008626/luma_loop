@@ -83,7 +83,9 @@ export class GameScene extends Phaser.Scene {
     const t = this.add.text(480, -30, text, { ...TXT, fontSize: '18px', backgroundColor: '#1a3a6a', padding: { x: 14, y: 8 } }).setOrigin(.5).setDepth(120);
     this.tweens.add({ targets: t, y: 110 + i * 44, duration: this.reduced ? 1 : 300, hold: 2200, yoyo: false, onComplete: () => this.time.delayedCall(2200, () => t.destroy()) });
   }
+  closePanel() { if (this.panel) { this.save.save(); this.panel.destroy(); this.panel = null; } }
   pausePanel() {
+    if (this.panel) return;
     const s = this.save.data.settings, c = this.add.container(0, 0).setDepth(110), clamp = v => Math.max(0, Math.min(1, Math.round(v * 10) / 10));
     c.add(this.add.rectangle(480, 270, 960, 540, 0x00000a, .92).setInteractive());
     c.add(this.add.text(480, 100, 'Settings', { ...TXT, fontSize: '40px', fontStyle: 'bold' }).setOrigin(.5));
@@ -93,7 +95,7 @@ export class GameScene extends Phaser.Scene {
     };
     row(180, 'Effects', 'sfx', () => this.audio.sfx('collect')); row(240, 'Music', 'music', () => this.audio.startMusic());
     const rm = makeButton(this, 480, 310, 340, 44, '', () => { s.reducedMotion = !s.reducedMotion; lab(); }), lab = () => rm.text.setText('Reduced motion: ' + (s.reducedMotion ? 'On (next level)' : 'Off (next level)')); lab(); c.add(rm);
-    c.add(makeButton(this, 480, 380, 200, 44, 'Back', () => { this.save.save(); c.destroy(); }));
+    c.add(makeButton(this, 480, 380, 200, 44, 'Back', () => this.closePanel())); this.panel = c;
   }
   say(t) { this.msg.setText(t); this.time.delayedCall(1600, () => this.msg.setText('')); }
   applyDim(instant) {
@@ -119,6 +121,7 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(450, () => { const n = this.deaths + 1; if (n % 5 === 0) this.scene.start('GameOver', { levelId: this.levelId, deaths: n }); else this.scene.restart({ levelId: this.levelId, deaths: n }); });
   }
   togglePause() {
+    if (this.panel) { this.closePanel(); return; }
     if (this.done || this.dead) return; this.paused = !this.paused;
     if (this.paused) { this.physics.pause(); this.pauseUI = this.overlay('Paused', [['Resume', () => this.togglePause()], ['Restart', () => this.scene.restart({ levelId: this.levelId })], ['Settings', () => this.pausePanel()], ['Main Menu', () => this.scene.start('Menu')]]); }
     else { this.physics.resume(); this.pauseUI.destroy(); }
@@ -138,7 +141,7 @@ export class GameScene extends Phaser.Scene {
     const next = LEVELS.find(l => l.id === this.levelId + 1), btns = [];
     if (next) btns.push(['Next Level', () => this.scene.start('Game', { levelId: next.id })]);
     btns.push(['Replay', () => this.scene.restart({ levelId: this.levelId })], ['Level Select', () => this.scene.start('LevelSelect')]);
-    this.overlay(next ? 'Level Complete' : 'The Loop Is Broken', btns, `Score ${this.score}  ·  Time ${t.toFixed(1)}s${newBest ? '  ·  New best!' : ''}` + (next ? '' : '\nLUMA is free. Every shadow hid a path, every light revealed one.') + (won.length ? '\nAchievement: ' + won.map(a => a.name).join(', ') : ''));
+    this.overlay(next ? 'Level Complete' : 'The Loop Is Broken', btns, `Score ${this.score}  ·  Time ${t.toFixed(1)}s${newBest ? '  ·  New best!' : ''}` + (next ? '' : '\nYou have completed all 30 levels. There are no more levels.\nLUMA is free: every shadow hid a path, every light revealed one.') + (won.length ? '\nAchievement: ' + won.map(a => a.name).join(', ') : ''));
   }
   update(_, delta) {
     const dt = delta / 1000; this.stars.forEach(s => { s.x = ((s.bx - this.player.x * .05 * s.z * 10) % 960 + 960) % 960; });

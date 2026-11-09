@@ -11,7 +11,7 @@ export class SaveSystem {
   }
   validate(o) {
     const d = defaults();
-    if (!o || typeof o !== 'object' || o.version !== SAVE_VERSION) return d;
+    if (!o || typeof o !== 'object' || !Number.isInteger(o.version) || o.version < 1 || o.version > SAVE_VERSION) return d; // older versions: read field by field below
     d.unlocked = Number.isInteger(o.unlocked) ? Math.min(LEVELS, Math.max(1, o.unlocked)) : 1;
     for (const [k, v] of Object.entries(o.completed || {})) {
       const id = +k;

@@ -12,11 +12,19 @@ import { GameOverScene } from './scenes/GameOverScene.js';
 import { GameScene } from './scenes/GameScene.js';
 
 let local = null;
-try { local = window.localStorage; local.getItem('ll_probe'); } catch { local = null; }
+// Inside Playables the only progress store is the cloud save (certification Integration 4), so localStorage is not touched there.
+if (!Playables.active) { try { local = window.localStorage; local.getItem('ll_probe'); } catch { local = null; } }
 const store = new CloudStorage(local), save = new SaveSystem(store), audio = new AudioSystem(save);
 audio.setPlatformAudio(Playables.isAudioEnabled());
 // Boot waits (briefly) for cloud data so the menu shows the merged progress.
-const cloud = Promise.race([Playables.loadData().then(raw => { if (raw && save.mergeFrom(raw)) save.save(); }), new Promise(r => setTimeout(r, 2000))]);
+// saveData is held back until loadData has finished (store.setGate); the boot screen waits at most 2 s for it.
+const loaded = Playables.loadData().then(raw => { if (raw && save.mergeFrom(raw)) save.save(); });
+store.setGate(loaded);
+const cloud = Promise.race([loaded, new Promise(r => setTimeout(r, 2000))]);
+// Touch pad: shown for touch devices, and always inside Playables so every interaction also works with a mouse.
+const showPad = () => document.body.classList.add('touch');
+if (Playables.active || navigator.maxTouchPoints > 0 || (window.matchMedia && matchMedia('(pointer:coarse)').matches)) showPad();
+window.addEventListener('touchstart', showPad, { once: true, passive: true });
 window.addEventListener('error', () => Playables.logError());
 
 const game = new Phaser.Game({
@@ -27,6 +35,6 @@ const game = new Phaser.Game({
   scene: [BootScene, MenuScene, WorldSelectScene, LevelSelectScene, SettingsScene, CreditsScene, GameOverScene, GameScene]
 });
 let sleepTimer = null;
-Playables.onPause(() => { game.events.emit('yt-pause'); audio.suspend(); sleepTimer = setTimeout(() => game.loop.sleep(), 120); });
+Playables.onPause(() => { game.events.emit('yt-pause'); audio.suspend(); save.save(); store.flush(); sleepTimer = setTimeout(() => game.loop.sleep(), 120); });
 Playables.onResume(() => { clearTimeout(sleepTimer); game.loop.wake(); audio.resume(); });
 Playables.onAudioEnabledChange(on => audio.setPlatformAudio(on));

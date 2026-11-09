@@ -28,6 +28,7 @@ npm run dev        # development server
 npm test           # automated tests (no dependencies needed)
 npm run build      # production build in dist/
 npm run build:playables   # Playables build in dist-playables/
+npm run audit:bundle      # checks dist-playables/ against Playables file rules
 npm run preview    # serve the production build locally
 ```
 
@@ -53,7 +54,7 @@ The build uses relative asset paths (`base: './'`), so it works under a reposito
 `src/systems/LevelValidator.js` searches every level for a route from start to portal using the game's jump physics, the energy budget, moving and timed platforms, and a laser-fairness rule. `npm test` runs it on all 30 levels. It does not model fragment energy refills or how movers feel, so playtesting still matters.
 
 ## YouTube Playables
-An integration layer is prepared (see `docs/PLAYABLES.md`) using documented SDK methods only, with a standalone fallback. The game has **not** been submitted to or approved by YouTube Playables.
+An integration layer is prepared and audited (see `PLAYABLES_AUDIT.md` and `docs/PLAYABLES.md`) using documented SDK methods only, with a standalone fallback. `npm run build:playables` makes the Playables build and `npm run audit:bundle` checks it. The game has **not** been tested in the official Test Suite, submitted, or approved by YouTube Playables.
 
 ## Credits
 Design, code and levels by Joshua Samuel. Built with [Phaser 3](https://phaser.io/) and [Vite](https://vitejs.dev/).

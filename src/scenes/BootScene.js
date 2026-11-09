@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
+import { Playables } from '../platform/Playables.js';
 // Procedural textures only: no external assets to fail loading. Doubles as the loading screen.
 export class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
   create() {
     this.add.text(480, 270, 'LUMA LOOP\nloading...', { fontFamily: 'system-ui,sans-serif', fontSize: '32px', color: '#aaeeff', align: 'center' }).setOrigin(.5);
+    Playables.firstFrameReady(); // the loading screen is on screen (certification Integration 2)
     const g = this.make.graphics({ x: 0, y: 0, add: false });
     for (let r = 14; r > 0; r -= 2) { g.fillStyle(0xffffff, r > 11 ? .08 : r > 8 ? .2 : 1); g.fillCircle(14, 14, r); }
     g.generateTexture('orb', 28, 28); g.clear();

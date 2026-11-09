@@ -9,7 +9,7 @@ html,body{margin:0;height:100%;background:#050818;overflow:hidden;touch-action:n
 .g{display:flex;gap:12px;pointer-events:auto}
 .b{width:68px;height:68px;border-radius:50%;border:2px solid #6ff;background:rgba(40,120,180,.35);color:#dff;font:26px system-ui;display:flex;align-items:center;justify-content:center}
 .b.on{background:rgba(100,255,255,.55)}#sw{border-color:#d6f;background:rgba(150,60,200,.35)}
-@media (pointer:coarse){body.playing #pad{display:flex}}
+body.playing.touch #pad{display:flex}
 </style></head><body>
 <div id="game"></div>
 <div id="pad"><div class="g"><div class="b" id="bl">◀</div><div class="b" id="br">▶</div></div><div class="g"><div class="b" id="sw">⇄</div><div class="b" id="bj">▲</div></div></div>

@@ -5,7 +5,8 @@ import { LEVELS } from '../levels/index.js';
 export class MenuScene extends Phaser.Scene {
   constructor() { super('Menu'); }
   create() {
-    if (!this.registry.get('ytReady')) { this.registry.set('ytReady', true); Playables.firstFrameReady(); this.events.once('update', () => Playables.gameReady()); }
+    // gameReady only once the interactive main menu is showing (never during loading).
+    if (!this.registry.get('ytReady')) { this.registry.set('ytReady', true); this.events.once('update', () => Playables.gameReady()); }
     const save = this.registry.get('save');
     this.add.rectangle(480, 270, 960, 540, 0x0a2a60);
     for (let i = 0; i < 70; i++) { const s = this.add.image(Math.random() * 960, Math.random() * 540, 'dot').setAlpha(.2 + Math.random() * .6); this.tweens.add({ targets: s, alpha: .1, duration: 1000 + Math.random() * 2000, yoyo: true, repeat: -1 }); }

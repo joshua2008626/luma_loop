@@ -6,10 +6,10 @@ const SFX = {
 };
 const NOTES = [220, 261.6, 329.6, 392, 329.6, 261.6, 196, 261.6];
 export class AudioSystem {
-  constructor(save) { this.save = save; this.ctx = null; this.platformEnabled = true; this.timer = null; this.i = 0; }
+  constructor(save) { this.save = save; this.ctx = null; this.platformEnabled = true; this.paused = false; this.timer = null; this.wantMusic = false; this.i = 0; }
   get volume() { return this.save.data.settings.sfx; }
   tone(f, d, type = 'sine', v = .06, f2 = 0, delay = 0, vol = this.volume) {
-    if (vol <= 0 || !this.platformEnabled) return;
+    if (vol <= 0 || !this.platformEnabled || this.paused) return;
     try {
       this.ctx = this.ctx || new (window.AudioContext || window.webkitAudioContext)();
       if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -21,11 +21,15 @@ export class AudioSystem {
   }
   sfx(name) { const s = SFX[name]; if (s) this.tone(...s); }
   win() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, .3, 'sine', .07, 0, i * .12)); }
+  musicTick() { const m = this.save.data.settings.music; if (m > 0) this.tone(NOTES[this.i++ % NOTES.length], 1.4, 'sine', .035, 0, 0, m); }
   startMusic() {
-    if (this.timer) return;
-    this.timer = setInterval(() => { const m = this.save.data.settings.music; if (m > 0) this.tone(NOTES[this.i++ % NOTES.length], 1.4, 'sine', .035, 0, 0, m); }, 650);
+    this.wantMusic = true;
+    if (this.timer || this.paused) return;
+    this.timer = setInterval(() => this.musicTick(), 650);
   }
+  stopTimer() { if (this.timer) { clearInterval(this.timer); this.timer = null; } }
   setPlatformAudio(on) { this.platformEnabled = on; try { if (this.ctx) on ? this.ctx.resume() : this.ctx.suspend(); } catch { /* ignore */ } }
-  suspend() { try { this.ctx && this.ctx.suspend(); } catch { /* ignore */ } }
-  resume() { try { this.platformEnabled && this.ctx && this.ctx.resume(); } catch { /* ignore */ } }
+  // Playables onPause/onResume: stop all audio work (context suspended, music timer cleared, nothing scheduled).
+  suspend() { this.paused = true; this.stopTimer(); try { this.ctx && this.ctx.suspend(); } catch { /* ignore */ } }
+  resume() { this.paused = false; try { this.platformEnabled && this.ctx && this.ctx.resume(); } catch { /* ignore */ } if (this.wantMusic) this.startMusic(); }
 }
